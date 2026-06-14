@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 class UserCreate(BaseModel):
     name: str
     email: str
-    hashed_password: str
+    password: str
 
 
 class UserResponse(BaseModel):
@@ -35,6 +35,7 @@ class CompanyCreate(BaseModel):
 
 class CompanyResponse(BaseModel):
     id: int
+    user_id: int
     name: str
     website: str
     location: str
@@ -49,7 +50,6 @@ class CompanyResponse(BaseModel):
 # -------------------------
 
 class JobApplicationCreate(BaseModel):
-    user_id: int
     company_id: int
     job_title: str
     job_type: str
@@ -133,3 +133,12 @@ class ApplicationNoteResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# -------------------------
+# Token Schema
+# -------------------------
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str

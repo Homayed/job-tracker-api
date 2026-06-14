@@ -1,11 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException
-
+from datetime import datetime
 from typing import Optional, List
 
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-
-from datetime import datetime
 
 from database import Base, engine, get_db
 from models import User, Company, JobApplication, Interview, ApplicationNote
@@ -20,10 +19,14 @@ from schemas import (
     InterviewResponse,
     ApplicationNoteCreate,
     ApplicationNoteResponse,
+    Token,
 )
+from auth import hash_password, verify_password, create_access_token, decode_access_token
 
 
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 Base.metadata.create_all(bind=engine)
 
@@ -36,15 +39,15 @@ def home():
 
 
 # -------------------------
-# User Endpoints
+# Auth / Register Endpoints
 # -------------------------
 
-@app.post("/users/",response_model=UserResponse)
-def add_user(user: UserCreate, db: Session = Depends(get_db)):
+@app.post("/register/", response_model=UserResponse)
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         name=user.name,
         email=user.email,
-        hashed_password=user.hashed_password
+        hashed_password=hash_password(user.password)
     )
 
     db.add(new_user)
@@ -54,23 +57,100 @@ def add_user(user: UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
+@app.post("/login", response_model=Token)
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.email == form_data.username).first()
 
-@app.get("/users/",response_model=List[UserResponse])
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+
+    password_is_valid = verify_password(
+        form_data.password,
+        user.hashed_password
+    )
+
+    if password_is_valid is False:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "email": user.email
+        }
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    payload = decode_access_token(token)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+
+    user_id = payload.get("sub")
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload"
+        )
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    return user
+
+
+@app.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+# -------------------------
+# User Endpoints
+# -------------------------
+
+@app.get("/users/", response_model=List[UserResponse])
 def get_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
     return users
 
 
-@app.get("/users/{user_id}",response_model=UserResponse)
+@app.get("/users/{user_id}", response_model=UserResponse)
 def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
 
     if user is None:
         raise HTTPException(status_code=404, detail="user not found")
+
     return user
 
 
-@app.put("/users/{user_id}",response_model=UserResponse)
+@app.put("/users/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.id == user_id).first()
 
@@ -79,13 +159,12 @@ def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
 
     existing_user.name = user.name
     existing_user.email = user.email
-    existing_user.hashed_password = user.hashed_password
+    existing_user.hashed_password = hash_password(user.password)
 
     db.commit()
     db.refresh(existing_user)
 
     return existing_user
-
 
 
 @app.delete("/users/{user_id}")
@@ -112,13 +191,19 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
         "message": "User deleted successfully"
     }
 
+
 # -------------------------
 # Company Endpoints
 # -------------------------
 
-@app.post("/companies/",response_model= CompanyResponse)
-def add_company(company: CompanyCreate, db: Session = Depends(get_db)):
+@app.post("/companies/", response_model=CompanyResponse)
+def add_company(
+    company: CompanyCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     new_company = Company(
+        user_id=current_user.id,
         name=company.name,
         website=company.website,
         location=company.location,
@@ -132,25 +217,46 @@ def add_company(company: CompanyCreate, db: Session = Depends(get_db)):
     return new_company
 
 
-@app.get("/companies/",response_model= List[CompanyResponse])
-def get_companies(db: Session = Depends(get_db)):
-    companies = db.query(Company).all()
+@app.get("/companies/", response_model=List[CompanyResponse])
+def get_companies(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    companies = db.query(Company).filter(
+        Company.user_id == current_user.id
+    ).all()
 
     return companies
 
 
-@app.get("/companies/{company_id}",response_model= CompanyResponse)
-def get_company_by_id(company_id: int, db: Session = Depends(get_db)):
-    company = db.query(Company).filter(Company.id == company_id).first()
+@app.get("/companies/{company_id}", response_model=CompanyResponse)
+def get_company_by_id(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    company = db.query(Company).filter(
+        Company.id == company_id,
+        Company.user_id == current_user.id
+    ).first()
 
     if company is None:
         raise HTTPException(status_code=404, detail="company not found")
 
     return company
 
-@app.put("/companies/{company_id}",response_model= CompanyResponse)
-def update_company(company_id: int, company: CompanyCreate, db: Session = Depends(get_db)):
-    existing_company = db.query(Company).filter(Company.id == company_id).first()
+
+@app.put("/companies/{company_id}", response_model=CompanyResponse)
+def update_company(
+    company_id: int,
+    company: CompanyCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    existing_company = db.query(Company).filter(
+        Company.id == company_id,
+        Company.user_id == current_user.id
+    ).first()
 
     if existing_company is None:
         raise HTTPException(status_code=404, detail="company not found")
@@ -165,16 +271,27 @@ def update_company(company_id: int, company: CompanyCreate, db: Session = Depend
 
     return existing_company
 
+
 @app.delete("/companies/{company_id}")
-def delete_company(company_id: int, db: Session = Depends(get_db)):
-    company = db.query(Company).filter(Company.id == company_id).first()
+def delete_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    company = db.query(Company).filter(
+        Company.id == company_id,
+        Company.user_id == current_user.id
+    ).first()
 
     if company is None:
         raise HTTPException(status_code=404, detail="company not found")
 
-    existing_applications = db.query(JobApplication).filter(JobApplication.company_id == company_id).first()
+    existing_application = db.query(JobApplication).filter(
+        JobApplication.company_id == company_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
-    if existing_applications is not None:
+    if existing_application is not None:
         raise HTTPException(
             status_code=400,
             detail="cannot delete company because it has job applications"
@@ -192,20 +309,22 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
 # Job Application Endpoints
 # -------------------------
 
-@app.post("/applications/",response_model=JobApplicationResponse)
-def add_application(application: JobApplicationCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == application.user_id).first()
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-
-    company = db.query(Company).filter(Company.id == application.company_id).first()
+@app.post("/applications/", response_model=JobApplicationResponse)
+def add_application(
+    application: JobApplicationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    company = db.query(Company).filter(
+        Company.id == application.company_id,
+        Company.user_id == current_user.id
+    ).first()
 
     if company is None:
         raise HTTPException(status_code=404, detail="company not found")
 
     new_application = JobApplication(
-        user_id=application.user_id,
+        user_id=current_user.id,
         company_id=application.company_id,
         job_title=application.job_title,
         job_type=application.job_type,
@@ -235,16 +354,18 @@ def get_applications(
     priority: Optional[str] = None,
     remote: Optional[bool] = None,
     company_id: Optional[int] = None,
-    user_id: Optional[int] = None,
     job_type: Optional[str] = None,
     source: Optional[str] = None,
     location: Optional[str] = None,
     search: Optional[str] = None,
     skip: int = 0,
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    query = db.query(JobApplication)
+    query = db.query(JobApplication).filter(
+        JobApplication.user_id == current_user.id
+    )
 
     if status is not None:
         query = query.filter(JobApplication.status == status)
@@ -257,9 +378,6 @@ def get_applications(
 
     if company_id is not None:
         query = query.filter(JobApplication.company_id == company_id)
-
-    if user_id is not None:
-        query = query.filter(JobApplication.user_id == user_id)
 
     if job_type is not None:
         query = query.filter(JobApplication.job_type == job_type)
@@ -290,9 +408,16 @@ def get_applications(
         "applications": applications
     }
 
+
 @app.get("/applications/summary")
-def get_application_summary(db: Session = Depends(get_db)):
-    applications = db.query(JobApplication).all()
+def get_application_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    applications = db.query(JobApplication).filter(
+        JobApplication.user_id == current_user.id
+    ).all()
+
     total_applications = len(applications)
     applied_count = 0
     interview_count = 0
@@ -304,14 +429,19 @@ def get_application_summary(db: Session = Depends(get_db)):
 
         if application.status == "applied":
             applied_count += 1
+
         if application.status == "interview":
-            interview_count +=1
+            interview_count += 1
+
         if application.status == "rejected":
-            rejected_count +=1
+            rejected_count += 1
+
         if application.remote is True:
-            remote_count +=1
+            remote_count += 1
+
         if application.priority == "high":
             high_priority_count += 1
+
     return {
         "message": "Application summary fetched successfully",
         "total_applications": total_applications,
@@ -322,37 +452,47 @@ def get_application_summary(db: Session = Depends(get_db)):
         "high_priority_count": high_priority_count
     }
 
-@app.get("/applications/{application_id}", response_model= JobApplicationResponse)
-def get_application_by_id(application_id: int, db: Session = Depends(get_db)):
-    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+
+@app.get("/applications/{application_id}", response_model=JobApplicationResponse)
+def get_application_by_id(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    application = db.query(JobApplication).filter(
+        JobApplication.id == application_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if application is None:
         raise HTTPException(status_code=404, detail="application not found")
 
     return application
 
-@app.put("/applications/{application_id}",response_model= JobApplicationResponse)
+
+@app.put("/applications/{application_id}", response_model=JobApplicationResponse)
 def update_application(
     application_id: int,
     application: JobApplicationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    existing_application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    existing_application = db.query(JobApplication).filter(
+        JobApplication.id == application_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if existing_application is None:
         raise HTTPException(status_code=404, detail="application not found")
 
-    user = db.query(User).filter(User.id == application.user_id).first()
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-
-    company = db.query(Company).filter(Company.id == application.company_id).first()
+    company = db.query(Company).filter(
+        Company.id == application.company_id,
+        Company.user_id == current_user.id
+    ).first()
 
     if company is None:
         raise HTTPException(status_code=404, detail="company not found")
 
-    existing_application.user_id = application.user_id
     existing_application.company_id = application.company_id
     existing_application.job_title = application.job_title
     existing_application.job_type = application.job_type
@@ -376,14 +516,26 @@ def update_application(
 
 
 @app.delete("/applications/{application_id}")
-def delete_application(application_id: int, db: Session = Depends(get_db)):
-    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+def delete_application(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    application = db.query(JobApplication).filter(
+        JobApplication.id == application_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if application is None:
         raise HTTPException(status_code=404, detail="application not found")
 
-    db.query(Interview).filter(Interview.application_id == application_id).delete()
-    db.query(ApplicationNote).filter(ApplicationNote.application_id == application_id).delete()
+    db.query(Interview).filter(
+        Interview.application_id == application_id
+    ).delete()
+
+    db.query(ApplicationNote).filter(
+        ApplicationNote.application_id == application_id
+    ).delete()
 
     db.delete(application)
     db.commit()
@@ -392,13 +544,21 @@ def delete_application(application_id: int, db: Session = Depends(get_db)):
         "message": "Application deleted successfully"
     }
 
+
 # -------------------------
 # Interview Endpoints
 # -------------------------
 
-@app.post("/interviews/", response_model= InterviewResponse)
-def add_interview(interview: InterviewCreate, db: Session = Depends(get_db)):
-    application = db.query(JobApplication).filter(JobApplication.id == interview.application_id).first()
+@app.post("/interviews/", response_model=InterviewResponse)
+def add_interview(
+    interview: InterviewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    application = db.query(JobApplication).filter(
+        JobApplication.id == interview.application_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if application is None:
         raise HTTPException(status_code=404, detail="application not found")
@@ -420,34 +580,62 @@ def add_interview(interview: InterviewCreate, db: Session = Depends(get_db)):
     return new_interview
 
 
-@app.get("/interviews/", response_model= List[InterviewResponse])
-def get_interviews(db: Session = Depends(get_db)):
-    interviews = db.query(Interview).all()
+@app.get("/interviews/", response_model=List[InterviewResponse])
+def get_interviews(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    interviews = db.query(Interview).join(
+        JobApplication,
+        Interview.application_id == JobApplication.id
+    ).filter(
+        JobApplication.user_id == current_user.id
+    ).all()
 
     return interviews
 
-@app.get("/interviews/{interview_id}", response_model= InterviewResponse)
-def get_interview_by_id(interview_id: int, db: Session = Depends(get_db)):
-    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+
+@app.get("/interviews/{interview_id}", response_model=InterviewResponse)
+def get_interview_by_id(
+    interview_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    interview = db.query(Interview).join(
+        JobApplication,
+        Interview.application_id == JobApplication.id
+    ).filter(
+        Interview.id == interview_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if interview is None:
         raise HTTPException(status_code=404, detail="interview not found")
 
     return interview
 
-@app.put("/interviews/{interview_id}", response_model= InterviewResponse)
+
+@app.put("/interviews/{interview_id}", response_model=InterviewResponse)
 def update_interview(
     interview_id: int,
     interview: InterviewCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    existing_interview = db.query(Interview).filter(Interview.id == interview_id).first()
+    existing_interview = db.query(Interview).join(
+        JobApplication,
+        Interview.application_id == JobApplication.id
+    ).filter(
+        Interview.id == interview_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if existing_interview is None:
         raise HTTPException(status_code=404, detail="interview not found")
 
     application = db.query(JobApplication).filter(
-        JobApplication.id == interview.application_id
+        JobApplication.id == interview.application_id,
+        JobApplication.user_id == current_user.id
     ).first()
 
     if application is None:
@@ -466,9 +654,20 @@ def update_interview(
 
     return existing_interview
 
+
 @app.delete("/interviews/{interview_id}")
-def delete_interview(interview_id: int, db: Session = Depends(get_db)):
-    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+def delete_interview(
+    interview_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    interview = db.query(Interview).join(
+        JobApplication,
+        Interview.application_id == JobApplication.id
+    ).filter(
+        Interview.id == interview_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if interview is None:
         raise HTTPException(status_code=404, detail="interview not found")
@@ -485,9 +684,16 @@ def delete_interview(interview_id: int, db: Session = Depends(get_db)):
 # Application Note Endpoints
 # -------------------------
 
-@app.post("/application-notes/", response_model= ApplicationNoteResponse)
-def add_application_note(note: ApplicationNoteCreate, db: Session = Depends(get_db)):
-    application = db.query(JobApplication).filter(JobApplication.id == note.application_id).first()
+@app.post("/application-notes/", response_model=ApplicationNoteResponse)
+def add_application_note(
+    note: ApplicationNoteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    application = db.query(JobApplication).filter(
+        JobApplication.id == note.application_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if application is None:
         raise HTTPException(status_code=404, detail="application not found")
@@ -504,35 +710,62 @@ def add_application_note(note: ApplicationNoteCreate, db: Session = Depends(get_
     return new_note
 
 
-@app.get("/application-notes/", response_model= List[ApplicationNoteResponse])
-def get_application_notes(db: Session = Depends(get_db)):
-    notes = db.query(ApplicationNote).all()
+@app.get("/application-notes/", response_model=List[ApplicationNoteResponse])
+def get_application_notes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    notes = db.query(ApplicationNote).join(
+        JobApplication,
+        ApplicationNote.application_id == JobApplication.id
+    ).filter(
+        JobApplication.user_id == current_user.id
+    ).all()
 
     return notes
 
 
-@app.get("/application-notes/{note_id}", response_model= ApplicationNoteResponse)
-def get_application_note_by_id(note_id: int, db: Session = Depends(get_db)):
-    note = db.query(ApplicationNote).filter(ApplicationNote.id == note_id).first()
+@app.get("/application-notes/{note_id}", response_model=ApplicationNoteResponse)
+def get_application_note_by_id(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    note = db.query(ApplicationNote).join(
+        JobApplication,
+        ApplicationNote.application_id == JobApplication.id
+    ).filter(
+        ApplicationNote.id == note_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if note is None:
         raise HTTPException(status_code=404, detail="note not found")
 
     return note
 
-@app.put("/application-notes/{note_id}", response_model= ApplicationNoteResponse)
+
+@app.put("/application-notes/{note_id}", response_model=ApplicationNoteResponse)
 def update_application_note(
     note_id: int,
     note: ApplicationNoteCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    existing_note = db.query(ApplicationNote).filter(ApplicationNote.id == note_id).first()
+    existing_note = db.query(ApplicationNote).join(
+        JobApplication,
+        ApplicationNote.application_id == JobApplication.id
+    ).filter(
+        ApplicationNote.id == note_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if existing_note is None:
         raise HTTPException(status_code=404, detail="note not found")
 
     application = db.query(JobApplication).filter(
-        JobApplication.id == note.application_id
+        JobApplication.id == note.application_id,
+        JobApplication.user_id == current_user.id
     ).first()
 
     if application is None:
@@ -548,8 +781,18 @@ def update_application_note(
 
 
 @app.delete("/application-notes/{note_id}")
-def delete_application_note(note_id: int, db: Session = Depends(get_db)):
-    note = db.query(ApplicationNote).filter(ApplicationNote.id == note_id).first()
+def delete_application_note(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    note = db.query(ApplicationNote).join(
+        JobApplication,
+        ApplicationNote.application_id == JobApplication.id
+    ).filter(
+        ApplicationNote.id == note_id,
+        JobApplication.user_id == current_user.id
+    ).first()
 
     if note is None:
         raise HTTPException(status_code=404, detail="note not found")
