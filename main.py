@@ -1,16 +1,13 @@
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from database import Base, engine, get_db
 from models import User, Company, JobApplication, Interview, ApplicationNote
 from schemas import (
-    UserCreate,
-    UserResponse,
     CompanyCreate,
     CompanyResponse,
     JobApplicationCreate,
@@ -19,14 +16,14 @@ from schemas import (
     InterviewResponse,
     ApplicationNoteCreate,
     ApplicationNoteResponse,
-    Token,
 )
-from auth import hash_password, verify_password, create_access_token, decode_access_token
-
+from dependencies import get_current_user
+from routers import auth_routes, users
 
 app = FastAPI()
+app.include_router(auth_routes.router)
+app.include_router(users.router)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 Base.metadata.create_all(bind=engine)
 
@@ -37,159 +34,6 @@ def home():
         "message": "Job Tracker API is running"
     }
 
-
-# -------------------------
-# Auth / Register Endpoints
-# -------------------------
-
-@app.post("/register/", response_model=UserResponse)
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    new_user = User(
-        name=user.name,
-        email=user.email,
-        hashed_password=hash_password(user.password)
-    )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    return new_user
-
-
-@app.post("/login", response_model=Token)
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(User.email == form_data.username).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
-
-    password_is_valid = verify_password(
-        form_data.password,
-        user.hashed_password
-    )
-
-    if password_is_valid is False:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
-
-    access_token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "email": user.email
-        }
-    )
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
-
-
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    payload = decode_access_token(token)
-
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
-        )
-
-    user_id = payload.get("sub")
-
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-
-    return user
-
-
-@app.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
-
-
-# -------------------------
-# User Endpoints
-# -------------------------
-
-@app.get("/users/", response_model=List[UserResponse])
-def get_users(db: Session = Depends(get_db)):
-    users = db.query(User).all()
-    return users
-
-
-@app.get("/users/{user_id}", response_model=UserResponse)
-def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-
-    return user
-
-
-@app.put("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.id == user_id).first()
-
-    if existing_user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-
-    existing_user.name = user.name
-    existing_user.email = user.email
-    existing_user.hashed_password = hash_password(user.password)
-
-    db.commit()
-    db.refresh(existing_user)
-
-    return existing_user
-
-
-@app.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if user is None:
-        raise HTTPException(status_code=404, detail="user not found")
-
-    existing_application = db.query(JobApplication).filter(
-        JobApplication.user_id == user_id
-    ).first()
-
-    if existing_application is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="cannot delete user because this user has job applications"
-        )
-
-    db.delete(user)
-    db.commit()
-
-    return {
-        "message": "User deleted successfully"
-    }
 
 
 # -------------------------
