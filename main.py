@@ -336,6 +336,38 @@ def get_applications(
         "applications": applications
     }
 
+@app.get("/applications/summary")
+def get_application_summary(db: Session = Depends(get_db)):
+    applications = db.query(JobApplication).all()
+    total_applications = len(applications)
+    applied_count = 0
+    interview_count = 0
+    rejected_count = 0
+    remote_count = 0
+    high_priority_count = 0
+
+    for application in applications:
+
+        if application.status == "applied":
+            applied_count += 1
+        if application.status == "interview":
+            interview_count +=1
+        if application.status == "rejected":
+            rejected_count +=1
+        if application.remote is True:
+            remote_count +=1
+        if application.priority == "high":
+            high_priority_count += 1
+    return {
+        "message": "Application summary fetched successfully",
+        "total_applications": total_applications,
+        "applied_count": applied_count,
+        "interview_count": interview_count,
+        "rejected_count": rejected_count,
+        "remote_count": remote_count,
+        "high_priority_count": high_priority_count
+    }
+
 @app.get("/applications/{application_id}")
 def get_application_by_id(application_id: int, db: Session = Depends(get_db)):
     application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
