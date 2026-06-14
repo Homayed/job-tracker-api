@@ -14,6 +14,16 @@ router = APIRouter(tags=["Auth"])
 
 @router.post("/register/", response_model=UserResponse)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(
+        User.email == user.email
+    ).first()
+
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="email already registered"
+        )
+
     new_user = User(
         name=user.name,
         email=user.email,
@@ -25,7 +35,6 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
 
     return new_user
-
 
 @router.post("/login", response_model=Token)
 def login(
