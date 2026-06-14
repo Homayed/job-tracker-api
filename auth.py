@@ -2,13 +2,12 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from jwt.exceptions import InvalidTokenError
 
+from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"],deprecated = "auto")
-SECRET_KEY = "change-this-secret-key-later"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 
 def hash_password(password: str):
     return pwd_context.hash(password)

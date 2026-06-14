@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "postgresql://mhnkarim@localhost:5432/job_tracker_db"
+from config import DATABASE_URL
 
 engine = create_engine(DATABASE_URL)
 
