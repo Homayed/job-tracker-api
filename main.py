@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -11,10 +11,15 @@ from database import Base, engine, get_db
 from models import User, Company, JobApplication, Interview, ApplicationNote
 from schemas import (
     UserCreate,
+    UserResponse,
     CompanyCreate,
+    CompanyResponse,
     JobApplicationCreate,
+    JobApplicationResponse,
     InterviewCreate,
+    InterviewResponse,
     ApplicationNoteCreate,
+    ApplicationNoteResponse,
 )
 
 
@@ -34,7 +39,7 @@ def home():
 # User Endpoints
 # -------------------------
 
-@app.post("/users/")
+@app.post("/users/",response_model=UserResponse)
 def add_user(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(
         name=user.name,
@@ -46,54 +51,26 @@ def add_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return {
-        "message": "User added successfully",
-        "user": {
-            "id": new_user.id,
-            "name": new_user.name,
-            "email": new_user.email,
-            "created_at": new_user.created_at
-        }
-    }
+    return new_user
 
 
-@app.get("/users/")
+
+@app.get("/users/",response_model=List[UserResponse])
 def get_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
-
-    return {
-        "message": "Users fetched successfully",
-        "users": [
-            {
-                "id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "created_at": user.created_at
-            }
-            for user in users
-        ]
-    }
+    return users
 
 
-@app.get("/users/{user_id}")
+@app.get("/users/{user_id}",response_model=UserResponse)
 def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
 
     if user is None:
         raise HTTPException(status_code=404, detail="user not found")
-
-    return {
-        "message": "User fetched successfully",
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "created_at": user.created_at
-        }
-    }
+    return user
 
 
-@app.put("/users/{user_id}")
+@app.put("/users/{user_id}",response_model=UserResponse)
 def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.id == user_id).first()
 
@@ -107,15 +84,8 @@ def update_user(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(existing_user)
 
-    return {
-        "message": "User updated successfully",
-        "user": {
-            "id": existing_user.id,
-            "name": existing_user.name,
-            "email": existing_user.email,
-            "created_at": existing_user.created_at
-        }
-    }
+    return existing_user
+
 
 
 @app.delete("/users/{user_id}")
@@ -146,7 +116,7 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 # Company Endpoints
 # -------------------------
 
-@app.post("/companies/")
+@app.post("/companies/",response_model= CompanyResponse)
 def add_company(company: CompanyCreate, db: Session = Depends(get_db)):
     new_company = Company(
         name=company.name,
@@ -159,35 +129,26 @@ def add_company(company: CompanyCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_company)
 
-    return {
-        "message": "Company added successfully",
-        "company": new_company
-    }
+    return new_company
 
 
-@app.get("/companies/")
+@app.get("/companies/",response_model= List[CompanyResponse])
 def get_companies(db: Session = Depends(get_db)):
     companies = db.query(Company).all()
 
-    return {
-        "message": "Companies fetched successfully",
-        "companies": companies
-    }
+    return companies
 
 
-@app.get("/companies/{company_id}")
+@app.get("/companies/{company_id}",response_model= CompanyResponse)
 def get_company_by_id(company_id: int, db: Session = Depends(get_db)):
     company = db.query(Company).filter(Company.id == company_id).first()
 
     if company is None:
         raise HTTPException(status_code=404, detail="company not found")
 
-    return {
-        "message": "Company fetched successfully",
-        "company": company
-    }
+    return company
 
-@app.put("/companies/{company_id}")
+@app.put("/companies/{company_id}",response_model= CompanyResponse)
 def update_company(company_id: int, company: CompanyCreate, db: Session = Depends(get_db)):
     existing_company = db.query(Company).filter(Company.id == company_id).first()
 
@@ -202,11 +163,7 @@ def update_company(company_id: int, company: CompanyCreate, db: Session = Depend
     db.commit()
     db.refresh(existing_company)
 
-    return {
-        "message": "Company updated successfully",
-        "company": existing_company
-    }
-
+    return existing_company
 
 @app.delete("/companies/{company_id}")
 def delete_company(company_id: int, db: Session = Depends(get_db)):
@@ -235,7 +192,7 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
 # Job Application Endpoints
 # -------------------------
 
-@app.post("/applications/")
+@app.post("/applications/",response_model=JobApplicationResponse)
 def add_application(application: JobApplicationCreate, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == application.user_id).first()
 
@@ -269,10 +226,7 @@ def add_application(application: JobApplicationCreate, db: Session = Depends(get
     db.commit()
     db.refresh(new_application)
 
-    return {
-        "message": "Application added successfully",
-        "application": new_application
-    }
+    return new_application
 
 
 @app.get("/applications/")
@@ -368,19 +322,16 @@ def get_application_summary(db: Session = Depends(get_db)):
         "high_priority_count": high_priority_count
     }
 
-@app.get("/applications/{application_id}")
+@app.get("/applications/{application_id}", response_model= JobApplicationResponse)
 def get_application_by_id(application_id: int, db: Session = Depends(get_db)):
     application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
 
     if application is None:
         raise HTTPException(status_code=404, detail="application not found")
 
-    return {
-        "message": "Application fetched successfully",
-        "application": application
-    }
+    return application
 
-@app.put("/applications/{application_id}")
+@app.put("/applications/{application_id}",response_model= JobApplicationResponse)
 def update_application(
     application_id: int,
     application: JobApplicationCreate,
@@ -421,10 +372,7 @@ def update_application(
     db.commit()
     db.refresh(existing_application)
 
-    return {
-        "message": "Application updated successfully",
-        "application": existing_application
-    }
+    return existing_application
 
 
 @app.delete("/applications/{application_id}")
@@ -448,7 +396,7 @@ def delete_application(application_id: int, db: Session = Depends(get_db)):
 # Interview Endpoints
 # -------------------------
 
-@app.post("/interviews/")
+@app.post("/interviews/", response_model= InterviewResponse)
 def add_interview(interview: InterviewCreate, db: Session = Depends(get_db)):
     application = db.query(JobApplication).filter(JobApplication.id == interview.application_id).first()
 
@@ -469,35 +417,25 @@ def add_interview(interview: InterviewCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_interview)
 
-    return {
-        "message": "Interview added successfully",
-        "interview": new_interview
-    }
+    return new_interview
 
 
-@app.get("/interviews/")
+@app.get("/interviews/", response_model= List[InterviewResponse])
 def get_interviews(db: Session = Depends(get_db)):
     interviews = db.query(Interview).all()
 
-    return {
-        "message": "Interviews fetched successfully",
-        "interviews": interviews
-    }
+    return interviews
 
-
-@app.get("/interviews/{interview_id}")
+@app.get("/interviews/{interview_id}", response_model= InterviewResponse)
 def get_interview_by_id(interview_id: int, db: Session = Depends(get_db)):
     interview = db.query(Interview).filter(Interview.id == interview_id).first()
 
     if interview is None:
         raise HTTPException(status_code=404, detail="interview not found")
 
-    return {
-        "message": "Interview fetched successfully",
-        "interview": interview
-    }
+    return interview
 
-@app.put("/interviews/{interview_id}")
+@app.put("/interviews/{interview_id}", response_model= InterviewResponse)
 def update_interview(
     interview_id: int,
     interview: InterviewCreate,
@@ -526,11 +464,7 @@ def update_interview(
     db.commit()
     db.refresh(existing_interview)
 
-    return {
-        "message": "Interview updated successfully",
-        "interview": existing_interview
-    }
-
+    return existing_interview
 
 @app.delete("/interviews/{interview_id}")
 def delete_interview(interview_id: int, db: Session = Depends(get_db)):
@@ -551,7 +485,7 @@ def delete_interview(interview_id: int, db: Session = Depends(get_db)):
 # Application Note Endpoints
 # -------------------------
 
-@app.post("/application-notes/")
+@app.post("/application-notes/", response_model= ApplicationNoteResponse)
 def add_application_note(note: ApplicationNoteCreate, db: Session = Depends(get_db)):
     application = db.query(JobApplication).filter(JobApplication.id == note.application_id).first()
 
@@ -567,35 +501,26 @@ def add_application_note(note: ApplicationNoteCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(new_note)
 
-    return {
-        "message": "Application note added successfully",
-        "note": new_note
-    }
+    return new_note
 
 
-@app.get("/application-notes/")
+@app.get("/application-notes/", response_model= List[ApplicationNoteResponse])
 def get_application_notes(db: Session = Depends(get_db)):
     notes = db.query(ApplicationNote).all()
 
-    return {
-        "message": "Application notes fetched successfully",
-        "notes": notes
-    }
+    return notes
 
 
-@app.get("/application-notes/{note_id}")
+@app.get("/application-notes/{note_id}", response_model= ApplicationNoteResponse)
 def get_application_note_by_id(note_id: int, db: Session = Depends(get_db)):
     note = db.query(ApplicationNote).filter(ApplicationNote.id == note_id).first()
 
     if note is None:
         raise HTTPException(status_code=404, detail="note not found")
 
-    return {
-        "message": "Application note fetched successfully",
-        "note": note
-    }
+    return note
 
-@app.put("/application-notes/{note_id}")
+@app.put("/application-notes/{note_id}", response_model= ApplicationNoteResponse)
 def update_application_note(
     note_id: int,
     note: ApplicationNoteCreate,
@@ -619,10 +544,7 @@ def update_application_note(
     db.commit()
     db.refresh(existing_note)
 
-    return {
-        "message": "Application note updated successfully",
-        "note": existing_note
-    }
+    return existing_note
 
 
 @app.delete("/application-notes/{note_id}")
