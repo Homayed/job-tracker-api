@@ -298,6 +298,7 @@ After login, copy the returned access token and authorize in Swagger.
 
 ---
 
+
 ### Create Application Note
 
 ```json
@@ -348,6 +349,37 @@ high priority count
 This can be used later for dashboard analytics.
 
 ---
+
+## Screenshots
+
+### Swagger API Documentation
+
+![Swagger API Documentation](assets/screenshots/swagger-overview1.png)
+![Swagger API Documentation](assets/screenshots/swagger-overview2.png)
+![Swagger API Documentation](assets/screenshots/swagger-overview3.png)
+![Swagger API Documentation](assets/screenshots/swagger-overview4.png)
+![Swagger API Documentation](assets/screenshots/swagger-overview5.png)
+
+### JWT Login Authentication
+
+![JWT Login Authentication](assets/screenshots/auth-login1.png)
+![JWT Login Authentication](assets/screenshots/auth-login2.png)
+
+### Create Company
+
+![Create Company](assets/screenshots/create-company1.png)
+![Create Company](assets/screenshots/create-company2.png)
+
+### Create Job Application
+
+![Create Job Application](assets/screenshots/create-application1.png)
+
+### Application Summary Dashboard Endpoint
+
+![Application Summary](assets/screenshots/application-summary1.png)
+![Application Summary](assets/screenshots/application-summary2.png)
+
+
 
 ## Security Features
 
