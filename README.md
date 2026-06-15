@@ -159,6 +159,58 @@ http://127.0.0.1:8000/docs
 
 ---
 
+## Run with Docker
+
+This project supports Docker and Docker Compose, allowing the FastAPI app and PostgreSQL database to run together in containers.
+
+### Build and Start Containers
+
+```bash
+docker compose up --build
+```
+
+The API will be available at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Swagger API documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### Docker Services
+
+The Docker setup includes two services:
+
+```text
+api - FastAPI backend application
+db  - PostgreSQL database
+```
+
+Inside Docker, the API connects to PostgreSQL using the database service name:
+
+```text
+db:5432
+```
+
+### Stop Containers
+
+```bash
+docker compose down
+```
+
+### Stop Containers and Remove Database Volume
+
+```bash
+docker compose down -v
+```
+
+Use this only when you want to delete the Docker PostgreSQL data and start fresh.
+
+
 ## API Endpoints
 
 ### Auth
@@ -411,7 +463,6 @@ Through this project, I practiced:
 
 * Add Alembic database migrations
 * Add automated tests with Pytest
-* Add Docker support
 * Add deployment
 * Add role-based access control
 * Add frontend dashboard
