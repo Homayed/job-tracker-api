@@ -23,6 +23,11 @@ The main goal of this project is to provide a secure personal job application tr
 * Duplicate email handling
 * Clean router-based FastAPI project structure
 * Environment variable configuration using `.env`
+* Docker and Docker Compose support
+* Automated API tests using Pytest
+* Separate Docker-based PostgreSQL test database
+* Tests for authentication, companies, applications, interviews, and application notes
+
 
 ---
 
@@ -33,14 +38,16 @@ The main goal of this project is to provide a secure personal job application tr
 * PostgreSQL
 * SQLAlchemy
 * Pydantic
-* JWT
+* JWT Authentication
 * Passlib
 * bcrypt
 * python-dotenv
 * Uvicorn
+* Docker
+* Docker Compose
+* Pytest
 
 ---
-
 ## Project Structure
 
 ```text
@@ -54,17 +61,29 @@ job-tracker-api/
 ├── dependencies.py
 ├── config.py
 ├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── pytest.ini
+├── .dockerignore
 ├── .gitignore
 │
-└── routers/
-    ├── __init__.py
-    ├── auth_routes.py
-    ├── users.py
-    ├── companies.py
-    ├── applications.py
-    ├── interviews.py
-    └── notes.py
+├── routers/
+│   ├── __init__.py
+│   ├── auth_routes.py
+│   ├── users.py
+│   ├── companies.py
+│   ├── applications.py
+│   ├── interviews.py
+│   └── notes.py
+│
+├── tests/
+│   ├── conftest.py
+│   └── test_main.py
+│
+└── assets/
+    └── screenshots/
 ```
+
 
 ---
 
@@ -209,6 +228,75 @@ docker compose down -v
 ```
 
 Use this only when you want to delete the Docker PostgreSQL data and start fresh.
+
+## Testing
+
+This project includes automated API tests using **Pytest** and FastAPI's test client.
+
+The test setup uses a separate PostgreSQL test database so tests do not affect the main development database.
+
+### Test Coverage
+
+The current test suite covers:
+
+```text
+Home route
+User registration
+Duplicate email handling
+User login and JWT token generation
+Protected /me route
+Create company
+Get companies
+Company routes requiring authentication
+Create job application
+Get job applications
+Application summary endpoint
+Application routes requiring authentication
+Create interview
+Get interviews
+Interview routes requiring authentication
+Create application note
+Get application notes
+Application note routes requiring authentication
+```
+### Run Tests
+
+The test setup uses a separate PostgreSQL test database.
+
+Start the Docker PostgreSQL database:
+
+```bash
+docker compose up -d db
+```
+
+Create the test database inside the Docker PostgreSQL container:
+
+```bash
+docker exec -it job_tracker_db psql -U postgres -c "CREATE DATABASE job_tracker_test_db;"
+```
+
+If the database already exists, this command may show an error. In that case, you can ignore it and continue.
+
+Run the test suite:
+
+```bash
+pytest
+```
+
+Expected result:
+
+```text
+All tests should pass successfully.
+```
+
+### Stop Docker Database
+
+After testing:
+
+```bash
+docker compose down
+```
+
 
 
 ## API Endpoints
@@ -431,6 +519,11 @@ This can be used later for dashboard analytics.
 ![Application Summary](assets/screenshots/application-summary1.png)
 ![Application Summary](assets/screenshots/application-summary2.png)
 
+### Testing Result
+
+![Pytest Test Results](assets/screenshots/pytest-tests.png)
+
+
 
 
 ## Security Features
@@ -462,7 +555,7 @@ Through this project, I practiced:
 ## Future Improvements
 
 * Add Alembic database migrations
-* Add automated tests with Pytest
+* Expand automated test coverage
 * Add deployment
 * Add role-based access control
 * Add frontend dashboard
