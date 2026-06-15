@@ -96,3 +96,86 @@ def test_get_current_user_me(client):
 
     assert data["name"] == "Zarif"
     assert data["email"] == "zarif@example.com"
+
+def get_auth_headers(client):
+    client.post(
+        "/register/",
+        json={
+            "name": "Zarif",
+            "email": "zarif@example.com",
+            "password": "zarif123"
+        }
+    )
+
+    login_response = client.post(
+        "/login",
+        data={
+            "username": "zarif@example.com",
+            "password": "zarif123"
+        }
+    )
+
+    token = login_response.json()["access_token"]
+
+    return {
+        "Authorization": f"Bearer {token}"
+    }
+
+def test_create_company(client):
+    headers = get_auth_headers(client)
+
+    response = client.post(
+        "/companies/",
+        json={
+            "name": "Google",
+            "website": "https://careers.google.com",
+            "location": "London",
+            "industry": "Technology"
+        },
+        headers=headers
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["name"] == "Google"
+    assert data["website"] == "https://careers.google.com"
+    assert data["location"] == "London"
+    assert data["industry"] == "Technology"
+    assert "id" in data
+    assert "user_id" in data
+
+
+def test_get_companies(client):
+    headers = get_auth_headers(client)
+
+    client.post(
+        "/companies/",
+        json={
+            "name": "Google",
+            "website": "https://careers.google.com",
+            "location": "London",
+            "industry": "Technology"
+        },
+        headers=headers
+    )
+
+    response = client.get(
+        "/companies/",
+        headers=headers
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["name"] == "Google"
+
+
+def test_companies_requires_login(client):
+    response = client.get("/companies/")
+
+    assert response.status_code == 401
