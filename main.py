@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import auth_routes, users, companies, applications, interviews, notes
+from routers import auth_routes, users, companies, applications, interviews, notes, ai
 
 app = FastAPI(title="Job Tracker API")
 
@@ -9,7 +9,7 @@ app.include_router(companies.router)
 app.include_router(applications.router)
 app.include_router(interviews.router)
 app.include_router(notes.router)
-
+app.include_router(ai.router)
 
 @app.get("/")
 def home():

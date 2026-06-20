@@ -142,3 +142,15 @@ class ApplicationNoteResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class AIJobAnalysisRequest(BaseModel):
+    job_description: str
+
+
+class AIJobAnalysisResponse(BaseModel):
+    match_score: int
+    strengths: list[str]
+    missing_skills: list[str]
+    interview_topics: list[str]
+    suggested_next_actions: list[str]
+    application_note: str
