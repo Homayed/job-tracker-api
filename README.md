@@ -1,20 +1,26 @@
+# Job Tracker API
+
+A backend API for tracking job applications, companies, interviews, and application notes.
+
+This project is built with **FastAPI**, **PostgreSQL**, **SQLAlchemy**, **Pydantic**, **JWT authentication**, and **Alembic database migrations**.
+
+The main goal of this project is to provide a secure personal job application tracking system where each user can manage only their own companies, job applications, interviews, and notes.
+
+---
+
 ## Live Demo
 
 Live API:
 
+```text
 https://job-tracker-api-dacl.onrender.com
+```
 
 Swagger Documentation:
 
+```text
 https://job-tracker-api-dacl.onrender.com/docs
-
-
-# Job Tracker API
-
-A backend API for tracking job applications, companies, interviews, and application notes.
-This project is built with **FastAPI**, **PostgreSQL**, **SQLAlchemy**, **Pydantic**, and **JWT authentication**.
-
-The main goal of this project is to provide a secure personal job application tracking system where each user can manage only their own companies, applications, interviews, and notes.
+```
 
 ---
 
@@ -34,11 +40,13 @@ The main goal of this project is to provide a secure personal job application tr
 * Duplicate email handling
 * Clean router-based FastAPI project structure
 * Environment variable configuration using `.env`
+* PostgreSQL database integration
+* SQLAlchemy ORM models
+* Alembic database migrations
 * Docker and Docker Compose support
 * Automated API tests using Pytest
 * Separate Docker-based PostgreSQL test database
 * Tests for authentication, companies, applications, interviews, and application notes
-
 
 ---
 
@@ -48,6 +56,7 @@ The main goal of this project is to provide a secure personal job application tr
 * FastAPI
 * PostgreSQL
 * SQLAlchemy
+* Alembic
 * Pydantic
 * JWT Authentication
 * Passlib
@@ -59,6 +68,7 @@ The main goal of this project is to provide a secure personal job application tr
 * Pytest
 
 ---
+
 ## Project Structure
 
 ```text
@@ -72,11 +82,18 @@ job-tracker-api/
 ├── dependencies.py
 ├── config.py
 ├── requirements.txt
+├── alembic.ini
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pytest.ini
 ├── .dockerignore
 ├── .gitignore
+│
+├── alembic/
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+│       └── initial_schema.py
 │
 ├── routers/
 │   ├── __init__.py
@@ -95,7 +112,6 @@ job-tracker-api/
     └── screenshots/
 ```
 
-
 ---
 
 ## Database Tables
@@ -108,6 +124,12 @@ companies
 job_applications
 interviews
 application_notes
+```
+
+Alembic also creates an internal migration tracking table:
+
+```text
+alembic_version
 ```
 
 ### Relationship Overview
@@ -147,6 +169,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 The `.env` file should not be committed to GitHub.
 
+For Docker, the database URL usually points to the Docker PostgreSQL service name:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@db:5432/job_tracker_db
+SECRET_KEY=change-this-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
 ---
 
 ## Installation
@@ -154,7 +185,7 @@ The `.env` file should not be committed to GitHub.
 Clone the repository:
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/Homayed/job-tracker-api.git
 cd job-tracker-api
 ```
 
@@ -171,9 +202,55 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+Create a local PostgreSQL database:
+
+```bash
+createdb job_tracker_db
+```
+
+If `createdb` is not available, open PostgreSQL and run:
+
+```sql
+CREATE DATABASE job_tracker_db;
+```
+
+Create a `.env` file in the project root and add the required environment variables.
+
 ---
 
-## Run the Project
+## Database Migrations
+
+This project uses **Alembic** for database migrations.
+
+Apply existing migrations:
+
+```bash
+alembic upgrade head
+```
+
+Create a new migration after changing SQLAlchemy models:
+
+```bash
+alembic revision --autogenerate -m "migration message"
+```
+
+Apply the new migration:
+
+```bash
+alembic upgrade head
+```
+
+Check the current migration version:
+
+```bash
+alembic current
+```
+
+Tables are created through Alembic migrations. The application does not use `Base.metadata.create_all()` in production startup.
+
+---
+
+## Run the Project Locally
 
 Start the FastAPI server:
 
@@ -226,6 +303,14 @@ Inside Docker, the API connects to PostgreSQL using the database service name:
 db:5432
 ```
 
+### Run Migrations Inside Docker
+
+After starting Docker containers, run:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
 ### Stop Containers
 
 ```bash
@@ -239,6 +324,31 @@ docker compose down -v
 ```
 
 Use this only when you want to delete the Docker PostgreSQL data and start fresh.
+
+---
+
+## Deployment Notes
+
+This project can be deployed on platforms such as Render.
+
+For Render, add the required environment variables:
+
+```text
+DATABASE_URL
+SECRET_KEY
+ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES
+```
+
+The start command should run database migrations before starting the server:
+
+```bash
+alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+This ensures the PostgreSQL database has the latest schema before the FastAPI app starts.
+
+---
 
 ## Testing
 
@@ -270,6 +380,7 @@ Create application note
 Get application notes
 Application note routes requiring authentication
 ```
+
 ### Run Tests
 
 The test setup uses a separate PostgreSQL test database.
@@ -308,7 +419,7 @@ After testing:
 docker compose down
 ```
 
-
+---
 
 ## API Endpoints
 
@@ -449,7 +560,6 @@ After login, copy the returned access token and authorize in Swagger.
 
 ---
 
-
 ### Create Application Note
 
 ```json
@@ -534,8 +644,7 @@ This can be used later for dashboard analytics.
 
 ![Pytest Test Results](assets/screenshots/pytest-tests.png)
 
-
-
+---
 
 ## Security Features
 
@@ -544,6 +653,8 @@ This can be used later for dashboard analytics.
 * Protected routes require login.
 * Users can only access their own companies, applications, interviews, and notes.
 * Duplicate email registration is handled safely.
+* Environment variables are used for sensitive configuration.
+* Database schema changes are managed through Alembic migrations.
 
 ---
 
@@ -554,23 +665,40 @@ Through this project, I practiced:
 * Building REST APIs with FastAPI
 * Connecting FastAPI with PostgreSQL
 * Creating SQLAlchemy models
+* Managing database schema changes with Alembic
 * Using Pydantic schemas for request and response validation
 * Implementing JWT authentication
 * Protecting user-owned resources
 * Structuring a FastAPI project using routers
 * Handling common backend errors professionally
+* Writing automated API tests with Pytest
+* Using Docker and Docker Compose for local development
 * Writing cleaner and more maintainable backend code
 
 ---
 
 ## Future Improvements
 
-* Add Alembic database migrations
-* Expand automated test coverage
-* Add deployment
-* Add role-based access control
-* Add frontend dashboard
-* Add email reminders for interviews and deadlines
+* Expand automated test coverage, including update, delete, 404, invalid token, and multi-user ownership tests
+* Add role-based access control for admin-level features
+* Add CI/CD with GitHub Actions
+* Add frontend dashboard for visual job tracking
+* Add email reminders for interviews, deadlines, and follow-ups
+* Add advanced analytics for job application progress
+
+### Planned AI Backend Features
+
+* Add LLM-powered job description analysis
+* Add AI-generated job match scoring based on user skills and job requirements
+* Add AI-assisted interview preparation suggestions
+* Add AI-generated application notes and follow-up message drafts
+* Add resume-to-job-description comparison using LLMs
+* Add RAG-based document search for resumes, cover letters, job descriptions, and interview notes
+* Add vector database support for semantic search and retrieval
+* Add AI agent workflow for tracking application deadlines, suggesting next actions, and preparing follow-ups
+* Add background task processing for AI analysis and notification workflows
+* Add prompt management, structured LLM outputs, and validation for production-ready AI features
+* Add monitoring, logging, and cost control for AI API usage
 
 ---
 
